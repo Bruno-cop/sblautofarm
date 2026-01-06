@@ -1,0 +1,265 @@
+--==================================================
+-- SBL REBORN | AUTO DROP + CRYSTAL (ESTÁVEL + GUI MODERNA)
+--==================================================
+
+--// SERVIÇOS
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+player.CharacterAdded:Connect(function(c) char = c end)
+
+--==================================================
+-- CONFIGURAÇÕES
+--==================================================
+local ATIVO = false
+local EXECUTANDO = false
+local PANIC = false
+
+local TWEEN_SPEED = 0.5 -- velocidade inicial do tween
+local ALTURA = 4
+local SPAM_AMOUNT = 16
+local MAX_DIST = 50 -- distância inicial máxima para cristais
+local REF_POS = nil -- posição de referência ao ativar o autofarm
+
+--==================================================
+-- FUNÇÕES BASE
+--==================================================
+local function hrp()
+	return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function segurarE(t)
+	if PANIC then return end
+	task.wait(t or 0.1)
+end
+
+local function tweenPara(cf)
+	if PANIC then return end
+	local root = hrp()
+	if not root or not cf then return end
+
+	local tween = TweenService:Create(
+		root,
+		TweenInfo.new(TWEEN_SPEED, Enum.EasingStyle.Linear),
+		{CFrame = cf}
+	)
+	tween:Play()
+	tween.Completed:Wait()
+end
+
+local function ordenarPorDistancia(lista)
+	local root = hrp()
+	if not root then return lista end
+
+	table.sort(lista, function(a, b)
+		local pa = a:IsA("BasePart") and a
+			or a:IsA("Model") and (a.PrimaryPart or a:FindFirstChildWhichIsA("BasePart"))
+		local pb = b:IsA("BasePart") and b
+			or b:IsA("Model") and (b.PrimaryPart or b:FindFirstChildWhichIsA("BasePart"))
+
+		if not pa or not pb then return false end
+		return (pa.Position - root.Position).Magnitude < (pb.Position - root.Position).Magnitude
+	end)
+
+	return lista
+end
+
+local function instantMine(prompt)
+	if not prompt or not prompt.Parent or PANIC then return end
+
+	task.wait(0.08)
+	segurarE(0.05)
+
+	local old = prompt.HoldDuration
+	prompt.HoldDuration = 0
+
+	for i = 1, SPAM_AMOUNT do
+		if PANIC or not prompt.Parent then break end
+		fireproximityprompt(prompt)
+		task.wait(0.02)
+	end
+
+	prompt.HoldDuration = old
+end
+
+--==================================================
+-- COLETAR DROPS
+--==================================================
+local function coletarDrops()
+	local folder = workspace:FindFirstChild("DropItem")
+	if not folder then return end
+
+	local drops = ordenarPorDistancia(folder:GetChildren())
+
+	for _, obj in ipairs(drops) do
+		if not ATIVO or PANIC then break end
+
+		local part =
+			obj:IsA("BasePart") and obj
+			or obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart"))
+
+		if part then
+			tweenPara(part.CFrame * CFrame.new(0, ALTURA, 0))
+			task.wait(0.1)
+
+			local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+			if prompt then
+				fireproximityprompt(prompt)
+				task.wait(0.08)
+			else
+				segurarE(0.12)
+				task.wait(0.08)
+			end
+		end
+	end
+end
+
+--==================================================
+-- MINERAR CRISTAIS (LIMITADO A MAX_DIST)
+--==================================================
+local function minerarCristais()
+	local folder = workspace:FindFirstChild("Minable")
+	if not folder then return end
+
+	local cristais = ordenarPorDistancia(folder:GetChildren())
+
+	for _, crystal in ipairs(cristais) do
+		if not ATIVO or PANIC then break end
+
+		local part =
+			crystal:IsA("BasePart") and crystal
+			or crystal:IsA("Model") and (crystal.PrimaryPart or crystal:FindFirstChildWhichIsA("BasePart"))
+
+		if part then
+			-- verificar distância do ponto de referência
+			if REF_POS and (part.Position - REF_POS).Magnitude > MAX_DIST then
+				continue -- ignora cristal fora do alcance
+			end
+
+			tweenPara(part.CFrame * CFrame.new(0, ALTURA, 0))
+			task.wait(0.12)
+
+			local prompt = part:FindFirstChildWhichIsA("ProximityPrompt", true)
+			if prompt then
+				instantMine(prompt)
+				task.wait(0.25)
+			end
+		end
+	end
+end
+
+--==================================================
+-- LOOP PRINCIPAL
+--==================================================
+local function mainLoop()
+	if EXECUTANDO then return end
+	EXECUTANDO = true
+
+	while ATIVO and not PANIC do
+		coletarDrops()
+		task.wait(0.25)
+		minerarCristais()
+		task.wait(0.35)
+	end
+
+	EXECUTANDO = false
+end
+
+--==================================================
+-- MENU SIMPLES COM TEXBOXES
+--==================================================
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "SBL_Stable"
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 220, 0, 190)
+frame.Position = UDim2.new(0, 20, 0.4, 0)
+frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+
+-- Botão Auto ON/OFF
+local btn = Instance.new("TextButton", frame)
+btn.Size = UDim2.new(1, -20, 0, 40)
+btn.Position = UDim2.new(0, 10, 0, 10)
+btn.Text = "AUTO: OFF"
+
+-- Botão Panic
+local panicBtn = Instance.new("TextButton", frame)
+panicBtn.Size = UDim2.new(1, -20, 0, 40)
+panicBtn.Position = UDim2.new(0, 10, 0, 60)
+panicBtn.Text = "PANIC (P)"
+
+-- TextBox para velocidade do tween
+local speedBox = Instance.new("TextBox", frame)
+speedBox.Size = UDim2.new(1, -20, 0, 30)
+speedBox.Position = UDim2.new(0, 10, 0, 110)
+speedBox.PlaceholderText = "Tween Speed (ex: 0.5)"
+speedBox.Text = tostring(TWEEN_SPEED)
+speedBox.TextColor3 = Color3.new(1,1,1)
+speedBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
+speedBox.ClearTextOnFocus = false
+speedBox.TextScaled = true
+
+speedBox.FocusLost:Connect(function(enterPressed)
+    local val = tonumber(speedBox.Text)
+    if val and val > 0 then
+        TWEEN_SPEED = val
+        print("✅ Tween Speed atualizado para", TWEEN_SPEED)
+    else
+        speedBox.Text = tostring(TWEEN_SPEED)
+    end
+end)
+
+-- TextBox para distância máxima de coleta de cristais
+local distBox = Instance.new("TextBox", frame)
+distBox.Size = UDim2.new(1, -20, 0, 30)
+distBox.Position = UDim2.new(0, 10, 0, 150)
+distBox.PlaceholderText = "Distância Máx. Cristais (ex: 50)"
+distBox.Text = tostring(MAX_DIST)
+distBox.TextColor3 = Color3.new(1,1,1)
+distBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
+distBox.ClearTextOnFocus = false
+distBox.TextScaled = true
+
+distBox.FocusLost:Connect(function(enterPressed)
+    local val = tonumber(distBox.Text)
+    if val and val > 0 then
+        MAX_DIST = val
+        print("✅ Distância máxima atualizada para", MAX_DIST)
+    else
+        distBox.Text = tostring(MAX_DIST)
+    end
+end)
+
+-- Funções dos botões
+btn.MouseButton1Click:Connect(function()
+    ATIVO = not ATIVO
+    btn.Text = "AUTO: " .. (ATIVO and "ON" or "OFF")
+    
+    if ATIVO then
+        local root = hrp()
+        if root then
+            REF_POS = root.Position -- salvar posição de ativação
+        end
+        mainLoop()
+    end
+end)
+
+panicBtn.MouseButton1Click:Connect(function()
+    PANIC = true
+    ATIVO = false
+    btn.Text = "AUTO: OFF"
+end)
+
+UserInputService.InputBegan:Connect(function(i, g)
+    if g then return end
+    if i.KeyCode == Enum.KeyCode.P then
+        PANIC = true
+        ATIVO = false
+        btn.Text = "AUTO: OFF"
+    end
+end)
+
+print("✅ SBL REBORN AUTO FARM — VERSÃO ESTÁVEL CARREGADA")
