@@ -169,7 +169,7 @@ local function mainLoop()
 end
 
 --==================================================
--- MENU SIMPLES COM TEXBOXES
+-- MENU GUI (ARRASTÁVEL + MINIMIZAR)
 --==================================================
 local gui = Instance.new("ScreenGui", game.CoreGui)
 gui.Name = "SBL_Stable"
@@ -178,6 +178,60 @@ local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0, 220, 0, 190)
 frame.Position = UDim2.new(0, 20, 0.4, 0)
 frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+frame.ClipsDescendants = true
+
+-- Botão de minimizar
+local minBtn = Instance.new("TextButton", frame)
+minBtn.Size = UDim2.new(0, 25, 0, 25)
+minBtn.Position = UDim2.new(1, -30, 0, 5)
+minBtn.Text = "_"
+minBtn.TextColor3 = Color3.new(1,1,1)
+minBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+minBtn.TextScaled = true
+
+local minimized = false
+minBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    for _, child in ipairs(frame:GetChildren()) do
+        if child ~= minBtn then
+            child.Visible = not minimized
+        end
+    end
+    frame.Size = minimized and UDim2.new(0, 220, 0, 35) or UDim2.new(0, 220, 0, 190)
+end)
+
+-- Tornar frame arrastável
+local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+local function update(input)
+    local delta = input.Position - dragStart
+    frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                               startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
 
 -- Botão Auto ON/OFF
 local btn = Instance.new("TextButton", frame)
@@ -191,7 +245,7 @@ panicBtn.Size = UDim2.new(1, -20, 0, 40)
 panicBtn.Position = UDim2.new(0, 10, 0, 60)
 panicBtn.Text = "PANIC (P)"
 
--- TextBox para velocidade do tween
+-- TextBox Tween Speed
 local speedBox = Instance.new("TextBox", frame)
 speedBox.Size = UDim2.new(1, -20, 0, 30)
 speedBox.Position = UDim2.new(0, 10, 0, 110)
@@ -212,7 +266,7 @@ speedBox.FocusLost:Connect(function(enterPressed)
     end
 end)
 
--- TextBox para distância máxima de coleta de cristais
+-- TextBox Distância Máx Cristais
 local distBox = Instance.new("TextBox", frame)
 distBox.Size = UDim2.new(1, -20, 0, 30)
 distBox.Position = UDim2.new(0, 10, 0, 150)
@@ -241,7 +295,7 @@ btn.MouseButton1Click:Connect(function()
     if ATIVO then
         local root = hrp()
         if root then
-            REF_POS = root.Position -- salvar posição de ativação
+            REF_POS = root.Position
         end
         mainLoop()
     end
